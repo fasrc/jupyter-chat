@@ -21,6 +21,10 @@ import {
 
 const WS_PATH = 'api/chat/ws';
 
+export function encodeChatPathForWebSocket(path: string): string {
+  return URLExt.encodeParts(path);
+}
+
 export namespace WebSocketHandler {
   export interface IOptions {
     serverSettings: ServerConnection.ISettings;
@@ -281,7 +285,7 @@ export class WebSocketHandler {
   }
 
   private _openSocket(): void {
-    const wsUrl = `${URLExt.join(this._serverSettings.wsUrl, WS_PATH)}/${encodeURIComponent(this._path)}`;
+    const wsUrl = `${URLExt.join(this._serverSettings.wsUrl, WS_PATH)}/${encodeChatPathForWebSocket(this._path)}`;
     const token = this._serverSettings.token;
     const url = token ? `${wsUrl}?token=${encodeURIComponent(token)}` : wsUrl;
 
