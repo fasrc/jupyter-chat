@@ -259,7 +259,20 @@ export class WebSocketHandler {
   }
 
   private _openSocket(): void {
-    const wsUrl = `${URLExt.join(this._serverSettings.wsUrl, WS_PATH)}/${encodeURIComponent(this._path)}`;
+    // Keep the path's slashes unencoded: some reverse proxies (e.g. Apache
+    // httpd < 2.4.57 with `AllowEncodedSlashes NoDecode`) double-encode `%2F`,
+    // so the server would see `dir%2Fa.chat` as a file name in the root.
+    const path = URLExt.encodeParts(this._path);
+    // `encodeParts` normalizes the path and drops a leading `/`, and the browser
+    // resolves any remaining leading `..` out of the route. Reject such paths
+    // here as the server would, since they can no longer reach its check.
+    if (this._path.startsWith('/') || path === '..' || path.startsWith('../')) {
+      this._ready.reject(
+        Object.assign(new Error('Invalid chat path'), { wsCloseCode: 1008 })
+      );
+      return;
+    }
+    const wsUrl = `${URLExt.join(this._serverSettings.wsUrl, WS_PATH)}/${path}`;
     const token = this._serverSettings.token;
     const url = token ? `${wsUrl}?token=${encodeURIComponent(token)}` : wsUrl;
 

@@ -154,3 +154,72 @@ describe('WebSocketHandler._handleMessage', () => {
     });
   });
 });
+
+describe('WebSocketHandler._openSocket', () => {
+  const OriginalWebSocket = globalThis.WebSocket;
+  let urls: string[];
+  let model: LabChatModel;
+  let handler: WebSocketHandler;
+
+  beforeEach(() => {
+    urls = [];
+    (globalThis as any).WebSocket = class {
+      constructor(url: string) {
+        urls.push(url);
+      }
+      close() {}
+    };
+    model = makeModel();
+  });
+
+  afterEach(() => {
+    globalThis.WebSocket = OriginalWebSocket;
+    Signal.clearData(model);
+    handler.dispose();
+  });
+
+  function openUrl(path: string, token = ''): string {
+    handler = new WebSocketHandler({
+      serverSettings: { wsUrl: 'ws://localhost:8888/', token } as any,
+      model
+    });
+    handler.setPath(path);
+    handler.initialize();
+    return urls[0];
+  }
+
+  it('keeps the slashes of a nested path unencoded', () => {
+    expect(openUrl('subdir/untitled.chat')).toBe(
+      'ws://localhost:8888/api/chat/ws/subdir/untitled.chat'
+    );
+  });
+
+  it('encodes each part of the path', () => {
+    expect(openUrl('my dir/a b%.chat')).toBe(
+      'ws://localhost:8888/api/chat/ws/my%20dir/a%20b%25.chat'
+    );
+  });
+
+  it('normalizes a path that stays in the root', () => {
+    expect(openUrl('nested/../a.chat')).toBe(
+      'ws://localhost:8888/api/chat/ws/a.chat'
+    );
+  });
+
+  it.each(['../x.chat', 'a/../../x.chat', '..', '/etc/passwd'])(
+    'rejects %j without opening a socket',
+    async path => {
+      expect(openUrl(path)).toBeUndefined();
+      await expect(handler.ready).rejects.toMatchObject({
+        message: 'Invalid chat path',
+        wsCloseCode: 1008
+      });
+    }
+  );
+
+  it('appends the encoded token', () => {
+    expect(openUrl('a.chat', 'a/b')).toBe(
+      'ws://localhost:8888/api/chat/ws/a.chat?token=a%2Fb'
+    );
+  });
+});
